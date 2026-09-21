@@ -469,9 +469,9 @@ export default function Overview() {
             <div className="exec-card">
               <div className="exec-card-top">
                 <span className="exec-label">Carbon Footprint Rate</span>
-                <span className="badge neutral">0.5 kg/kWh Grid</span>
+                <span className="badge neutral">{summary.emission_factor_kg_per_kwh != null ? `${summary.emission_factor_kg_per_kwh} kg/kWh Grid` : "Grid factor"}</span>
               </div>
-              <div className="exec-value">{(summary.avg_facility_power_kw * 0.5).toFixed(1)} <span style={{ fontSize: 16 }}>kg/hr</span></div>
+              <div className="exec-value">{summary.emission_factor_kg_per_kwh != null ? (summary.avg_facility_power_kw * summary.emission_factor_kg_per_kwh).toFixed(1) : "—"} <span style={{ fontSize: 16 }}>kg/hr</span></div>
               <div className="exec-subtext">Calculated as: Power Draw (kW) × Grid Carbon Intensity.</div>
             </div>
 

@@ -196,6 +196,37 @@ class OperatorAction(Base):
     )
 
 
+class SiteSettings(Base):
+    """
+    Single-row (id=1) site configuration used by the reporting and compliance
+    layer: the grid emission factor behind every carbon figure, and the
+    operator-DECLARED values GreenOps cannot derive from telemetry (installed
+    IT capacity, renewable energy factor, energy reuse factor).
+
+    Declared values are never inferred. A NULL means "not declared", and the
+    compliance report shows the matching indicator as missing rather than
+    inventing a number.
+    """
+    __tablename__ = "site_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    grid_emission_factor_kg_per_kwh = Column(Float, nullable=False, default=0.710)
+    emission_factor_source = Column(
+        String,
+        nullable=False,
+        default="CEA CO2 Baseline Database v21.0, FY2024-25 all-India weighted average (0.710 tCO2/MWh)",
+    )
+
+    installed_it_capacity_kw = Column(Float, nullable=True)
+    renewable_energy_factor = Column(Float, nullable=True)   # fraction 0..1 of facility energy
+    energy_reuse_factor = Column(Float, nullable=True)       # fraction 0..1 of facility energy
+
+    telemetry_simulated = Column(Boolean, nullable=False, default=True)
+
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Preferences(Base):
     """
     Organization-configurable weights for ranking recommendations. Single

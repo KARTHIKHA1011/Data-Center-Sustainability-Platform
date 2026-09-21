@@ -215,9 +215,12 @@ def get_time_of_day(timestamp: datetime = None) -> str:
     return "Off-Peak"
 
 
-# Assumed WUE factors (L/kWh) by cooling type -- clearly labeled as an
-# industry-average estimate, since real facility water meters aren't
-# available for this prototype. See project notes for justification.
+# Assumed water intensity (L per kWh of FACILITY energy) by cooling type --
+# clearly labeled as an industry-average estimate, since real facility water
+# meters aren't available for this prototype. Modelled water = facility
+# energy x this factor. The WUE KPI reported to operators and compliance
+# frameworks divides that water by IT energy instead; see compute_wue_rate().
+# See project notes for justification.
 #
 # Keys match the simulators' cooling_type vocabulary, which was deliberately
 # restricted to green_ai_datacenter.csv's own categories (Air/Hybrid/Liquid)
@@ -269,6 +272,40 @@ def _integrate_energy_by_server(db: Session, cutoff=None) -> dict:
     return energy_by_server
 
 
+def integrate_facility_and_it_energy(db: Session, cutoff=None) -> tuple:
+    """
+    Same left-Riemann integration as _integrate_energy_by_server(), but
+    returns BOTH facility energy and IT-equipment energy per server from a
+    single pass over the power readings: (facility_by_server, it_by_server),
+    in kWh.
+
+    Both are needed because standards define their KPIs against different
+    energies: PUE is facility energy over IT energy, and WUE is water over
+    IT energy (ISO/IEC 30134, EU Delegated Regulation 2024/1364), while
+    cost and carbon follow the total electricity bought, i.e. facility
+    energy. Same gap guard as everywhere else: intervals longer than
+    MAX_INTERVAL_HOURS are simulator downtime, not sustained draw.
+    """
+    facility_by_server = {}
+    it_by_server = {}
+    server_ids = [row[0] for row in db.query(models.PowerTelemetry.server_id).distinct()]
+    for server_id in server_ids:
+        query = db.query(models.PowerTelemetry).filter(models.PowerTelemetry.server_id == server_id)
+        if cutoff is not None:
+            query = query.filter(models.PowerTelemetry.timestamp >= cutoff)
+        rows = query.order_by(models.PowerTelemetry.timestamp.asc()).all()
+        facility_kwh = 0.0
+        it_kwh = 0.0
+        for prev, curr in zip(rows, rows[1:]):
+            hours = (curr.timestamp - prev.timestamp).total_seconds() / 3600.0
+            if 0 < hours <= MAX_INTERVAL_HOURS:
+                facility_kwh += prev.facility_power_kw * hours
+                it_kwh += prev.it_power_kw * hours
+        facility_by_server[server_id] = facility_kwh
+        it_by_server[server_id] = it_kwh
+    return facility_by_server, it_by_server
+
+
 def compute_energy_by_server(db: Session) -> dict:
     """Cumulative per-server energy, since telemetry began."""
     return _integrate_energy_by_server(db)
@@ -317,17 +354,27 @@ def compute_wue_rate(db: Session, window_hours: float = DEFAULT_WUE_WINDOW_HOURS
 
     Still an estimate, same as the cumulative total: built on the same
     placeholder industry-average WUE_FACTORS, not a real water meter reading.
-    The per-cooling-type factors were always correct -- this only fixes which
-    quantities get divided by which.
+
+    The denominator is IT EQUIPMENT energy, not facility energy. That is the
+    standard definition (The Green Grid, ISO/IEC 30134, EU Delegated
+    Regulation 2024/1364: WUE = water / E_IT). The modelled water itself
+    still scales with FACILITY energy (cooling water follows the heat being
+    rejected, which tracks total facility power), so the reported WUE is the
+    energy-weighted factor multiplied by PUE. Dividing by facility energy,
+    as this function used to, understated WUE by roughly the PUE.
     """
-    energy_by_server = compute_energy_by_server_windowed(db, window_hours)
+    facility_by_server, it_by_server = integrate_facility_and_it_energy(
+        db, datetime.utcnow() - timedelta(hours=window_hours)
+    )
     cooling_type_by_server = dict(db.query(models.Server.server_id, models.Server.cooling_type).all())
-    water_l = compute_wue_liters_weighted(energy_by_server, cooling_type_by_server)
-    energy_kwh = round(sum(energy_by_server.values()), 4)
-    rate = round(water_l / energy_kwh, 3) if energy_kwh > 0 else None
+    water_l = compute_wue_liters_weighted(facility_by_server, cooling_type_by_server)
+    it_energy_kwh = round(sum(it_by_server.values()), 4)
+    facility_energy_kwh = round(sum(facility_by_server.values()), 4)
+    rate = round(water_l / it_energy_kwh, 3) if it_energy_kwh > 0 else None
     return {
         "rate_l_per_kwh": rate,
         "window_hours": window_hours,
         "water_in_window_l": water_l,
-        "energy_in_window_kwh": energy_kwh,
+        "energy_in_window_kwh": it_energy_kwh,
+        "facility_energy_in_window_kwh": facility_energy_kwh,
     }

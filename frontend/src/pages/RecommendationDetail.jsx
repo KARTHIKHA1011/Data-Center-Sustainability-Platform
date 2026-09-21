@@ -1106,9 +1106,9 @@ export default function RecommendationDetail() {
                       {fmt(effectiveImpact?.estimated_carbon_reduction_kg, 2)}
                       <span className="rd-impact-cell-unit"> kg CO₂</span>
                     </span>
-                    <span className="rd-impact-cell-sub">at 0.5 kg/kWh grid</span>
+                    <span className="rd-impact-cell-sub">at {effectiveImpact?.emission_factor_kg_per_kwh ?? "—"} kg/kWh grid</span>
                     <div className="rd-impact-cell-tooltip">
-                      Energy saved (kWh) × 0.5 kg CO₂/kWh grid carbon intensity. Regional average — actual emissions depend on the live grid mix.
+                      Energy saved (kWh) × {effectiveImpact?.emission_factor_kg_per_kwh ?? "—"} kg CO₂/kWh grid emission factor (set in site settings). Grid average — actual emissions depend on the live grid mix.
                     </div>
                   </div>
                   <div className="rd-impact-cell">

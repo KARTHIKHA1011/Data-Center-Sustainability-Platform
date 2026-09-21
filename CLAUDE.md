@@ -70,6 +70,7 @@ backend/
     schemas.py                # Pydantic validation
     database.py                 # SQLite default; DATABASE_URL env var swaps to Postgres, zero code change
     rules_engine.py               # Idle-server / storage rules, PUE/WUE/energy math, per-type thresholds
+    compliance.py                   # Compliance-readiness layer: framework definitions (EU 2024/1364, BRSR Core), indicator status, site_settings accessors, configurable emission factor
     recommendations.py             # Flag->recommendation mapping, what-if simulation + candidate ranking, scoring, operator actions
     forecasting.py                   # Near-term CPU forecast: lagged-feature model + honest trend fallback
     train_workload_forecast.py         # Trains the forecast model from real DB telemetry (not the CSV)
@@ -197,9 +198,9 @@ flag — fixed).
 | **PUE** | `facility_power_kw ÷ it_power_kw` | Real ratio of two directly-simulated numbers — the one number here that's genuinely "physical" |
 | **Energy (kWh)** | True time integration: for each server, sum `power_kw × actual_hours_elapsed` between consecutive readings (left Riemann sum over real timestamps), skipping gaps > 5 min (telemetry downtime isn't counted as sustained draw) — `rules_engine.compute_energy_kwh()` | Correct as of this session's fix — previously assumed every reading = 1 minute, which overcounted ~4x since simulators actually post every 15s |
 | **Cost** | `energy_kwh × TARIFF_PER_KWH` (₹8.0, hardcoded placeholder) | Estimate |
-| **Carbon** | `energy_kwh × CARBON_INTENSITY_KG_PER_KWH` (0.5, hardcoded placeholder) | Estimate |
-| **Total water (L)** | `total_water_l` = cumulative `energy_kwh × WUE_FACTOR[cooling_type]` per server, summed — since telemetry began, weighted by each server's own cooling type (Air 0.3, Evaporative 1.8, Liquid 0.9 L/kWh) | Estimate. A running total, not a rate — expected to keep climbing the longer the system runs |
-| **WUE (L/kWh)** | `wue_l_per_kwh` = the *same* per-server weighted water calc, but both water and energy computed only over the last `WUE_WINDOW_HOURS` (default 1h) via `rules_engine.compute_wue_rate()` | Estimate. A real ratio in shape (should stabilize at steady state), but still built on placeholder factors, not a meter |
+| **Carbon** | `energy_kwh × emission factor`, factor read from the single-row `site_settings` table via `compliance.emission_factor(db)`. Default **0.710 kg/kWh** = CEA CO2 Baseline Database v21.0, FY2024-25 all-India weighted average (location-based Scope 2). Editable by the infrastructure manager on the ESG page. The old hardcoded `CARBON_INTENSITY_KG_PER_KWH = 0.5` no longer exists anywhere | Estimate, but now a sourced factor, not a placeholder. Still a grid average on simulated energy |
+| **Total water (L)** | `total_water_l` = cumulative `facility_energy_kwh × WUE_FACTOR[cooling_type]` per server, summed — since telemetry began, weighted by each server's own cooling type (Air 0.3, Hybrid 1.8, Liquid 0.9 L/kWh) | Estimate. A running total, not a rate — expected to keep climbing the longer the system runs |
+| **WUE (L/kWh)** | `wue_l_per_kwh` = water over the last `WUE_WINDOW_HOURS` (default 1h) divided by **IT** energy over the same window (EU 2024/1364 and ISO/IEC 30134-9 define WUE against IT energy), via `rules_engine.compute_wue_rate()`. Water itself is still modelled from *facility* energy. Both energies come from `rules_engine.integrate_facility_and_it_energy()` | Estimate. A real ratio in shape (should stabilize at steady state), but still built on placeholder factors, not a meter. Was facility-energy-denominated before entry 28 — numbers read ~PUE times lower than the standard definition would give |
 
 **Never derive water straight from CPU.** The only defensible causal chain is
 `CPU/workload → power → energy → × WUE factor → water`. In production, cost/
@@ -1108,6 +1109,62 @@ re-verified live:**
     empty today since no page has a text input for it) and
     `Preferences.updated_at` (returned by `GET /preferences`, just not
     displayed).
+28. **Compliance-readiness layer, sourced emission factor, and a WUE
+    definition fix.** The question was whether the ESG report is based on
+    metrics or on real compliance measures: it was metrics only (internal
+    KPIs, no mapping to any standard). Added `backend/app/compliance.py`,
+    a `site_settings` table (Alembic revision `5c035ed51515`, seeded with
+    id=1), and a "Compliance readiness" panel on the ESG page
+    (`ComplianceReadiness.jsx`, embedded in `Reports.jsx`).
+    - **Frameworks covered**: EU Delegated Regulation (EU) 2024/1364
+      (PUE, WUE, IT power demand, ERF, REF; in scope only at >= 500 kW
+      installed IT power, and this project is nowhere near that, so the
+      panel says "Below reporting threshold") and SEBI BRSR Core
+      (energy, Scope 1/2, water; indicative mapping only, BRSR Core needs
+      reasonable assurance). Endpoints: `GET /compliance/frameworks`,
+      `GET /compliance/{framework_id}?days=`, `GET`/`PUT /compliance/settings`
+      (PUT is `infrastructure_manager` only).
+    - **Indicator statuses**: `derived` (computed from telemetry),
+      `estimated` (telemetry times a placeholder or grid-average factor),
+      `declared` (operator entered it in site settings, e.g. installed
+      capacity, renewable share, reuse share), `missing` (GreenOps has no
+      way to know it, e.g. Scope 1). Readiness percent counts everything
+      not `missing`. It measures how much of a framework GreenOps can
+      *provide*, never whether a site *complies*. Copy must say "aligned
+      with", never "compliant with" or "certified".
+    - **Emission factor is now one number in one place.** Default 0.710
+      kg/kWh (CEA CO2 Baseline Database v21.0, FY2024-25, all-India
+      weighted average, location-based). Every consumer reads
+      `compliance.emission_factor(db)`: analytics summary/daily, ESG data
+      and CSV/PDF, per-server detail (`emission_factor_kg_per_kwh` in the
+      response), and what-if (`emission_factor_kg_per_kwh` in the result).
+      The frontend reads it from those responses, never from a constant.
+      **Do not reintroduce a hardcoded carbon constant in the backend or
+      frontend.** Effect of the change: every carbon figure rose by 0.71/0.5
+      = ~42% versus what the dashboard showed before, and the ranking's
+      carbon dimension moves accordingly (it is normalised per batch, so
+      relative order is mostly unaffected).
+    - **WUE denominator fix.** The standard defines WUE as water over *IT*
+      energy; the old code divided by facility energy, so reported WUE was
+      lower than the standard's by a factor of about PUE. Water itself is
+      still modelled from facility energy (cooling water scales with
+      facility load) times `WUE_FACTORS`. `compute_wue_rate()` now returns
+      `energy_in_window_kwh` (IT) plus `facility_energy_in_window_kwh`.
+      `total_water_l` is unchanged.
+    - `site_settings.telemetry_simulated` defaults to True, so the panel
+      always tells the reader the underlying telemetry is simulated. Flip
+      it only when real meter feeds are connected.
+    - **Verified live**: BRSR Scope 2 (318.53 kg) equals the ESG page
+      carbon figure (448.64 kWh x 0.71); changing the factor to 0.72 moved
+      both the compliance panel and the ESG figures, then restored to
+      0.710; `sustainability_manager` gets 403 on PUT; `alembic check`
+      reports no drift.
+    - **Not built (deliberately, first slice only)**: stored, versioned
+      report snapshots; more frameworks (ISO/IEC 30134 series as its own
+      definition, GHG Protocol inventory export); any assurance or audit
+      workflow. `pymupdf` was pip-installed into the local venv only to
+      read paper PDFs; it is not in `requirements.txt` and nothing in the
+      app imports it.
 
 If something looks numerically "off" again, check for the same class of
 issue: an assumption about cadence/scale that isn't actually enforced

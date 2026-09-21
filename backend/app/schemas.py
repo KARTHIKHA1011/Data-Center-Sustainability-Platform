@@ -115,3 +115,17 @@ class PreferencesIn(BaseModel):
     carbon_weight: float = Field(ge=0, le=10)
     water_weight: float = Field(ge=0, le=10)
     risk_weight: float = Field(ge=0, le=10)
+
+class SiteSettingsIn(BaseModel):
+    """Site settings behind every carbon figure and the compliance report.
+
+    installed_it_capacity_kw, renewable_energy_factor and energy_reuse_factor
+    are operator-declared values GreenOps cannot derive from telemetry. Send
+    null to clear one, which makes the matching indicator report as missing.
+    """
+    grid_emission_factor_kg_per_kwh: float = Field(gt=0, le=2)
+    emission_factor_source: str = Field(min_length=1, max_length=300)
+    installed_it_capacity_kw: Optional[float] = Field(default=None, gt=0, le=1_000_000)
+    renewable_energy_factor: Optional[float] = Field(default=None, ge=0, le=1)
+    energy_reuse_factor: Optional[float] = Field(default=None, ge=0, le=1)
+    telemetry_simulated: bool = True

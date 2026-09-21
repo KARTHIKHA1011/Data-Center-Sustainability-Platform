@@ -180,7 +180,25 @@ def train_from_database(db: Session) -> dict:
             horizon_minutes=forecasting.LONG_FORECAST_HORIZON_MINUTES,
         )
 
-    return {"cpu_model": cpu_metadata, "memory_model": memory_metadata, "long_cpu_model": long_metadata}
+    # 1-hour memory model -- reporting parity with the 1-hour CPU model (see
+    # forecasting.LONG_MEMORY_MODEL_PATH comment for why this isn't wired
+    # into any endpoint yet).
+    long_memory_frame_full = pd.DataFrame(long_samples).sort_values("timestamp") if long_samples else pd.DataFrame()
+    long_memory_frame = long_memory_frame_full.dropna(subset=["target_memory"]) if len(long_memory_frame_full) else long_memory_frame_full
+    long_memory_metadata = None
+    if len(long_memory_frame) >= MIN_SAMPLES:
+        long_memory_metadata = _train_one_target(
+            long_memory_frame, "target_memory", "memory_utilization",
+            forecasting.LONG_MEMORY_MODEL_PATH, forecasting.LONG_MEMORY_METRICS_PATH, len(rows),
+            horizon_minutes=forecasting.LONG_FORECAST_HORIZON_MINUTES,
+        )
+
+    return {
+        "cpu_model": cpu_metadata,
+        "memory_model": memory_metadata,
+        "long_cpu_model": long_metadata,
+        "long_memory_model": long_memory_metadata,
+    }
 
 
 def main():
@@ -206,6 +224,14 @@ def main():
                 "1-hour CPU model skipped -- not enough samples with a valid "
                 "60-minute-future reading yet; the 1h tier will use trend "
                 "extrapolation until there's enough history."
+            )
+        if metadata["long_memory_model"] is not None:
+            print(f"Saved {forecasting.LONG_MEMORY_MODEL_PATH}")
+            print(f"Saved {forecasting.LONG_MEMORY_METRICS_PATH}")
+        else:
+            print(
+                "1-hour memory model skipped -- not enough samples with a "
+                "valid 60-minute-future memory reading yet."
             )
     finally:
         db.close()

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from . import forecasting, models, rules_engine
+from . import compliance, forecasting, models, rules_engine
 
 
 # ------------------------------------------------------------
@@ -182,7 +182,8 @@ def sync_recommendations(db: Session):
 
 TARIFF_PER_KWH = 8.0
 
-CARBON_INTENSITY_KG_PER_KWH = 0.5
+# Carbon intensity is read per request from compliance.emission_factor(db)
+# (the configurable, sourced value in site_settings), not a constant here.
 
 CONSOLIDATION_OVERHEAD_FACTOR = 0.9
 
@@ -1146,9 +1147,12 @@ def calculate_what_if(
             # 4. CARBON BEFORE
             # ------------------------------------------------
 
+            emission_factor = compliance.emission_factor(db)
+            result["emission_factor_kg_per_kwh"] = emission_factor
+
             carbon_before_kg = (
                 energy_before_kwh
-                * CARBON_INTENSITY_KG_PER_KWH
+                * emission_factor
             )
 
             # ------------------------------------------------
@@ -1157,7 +1161,7 @@ def calculate_what_if(
 
             carbon_after_kg = (
                 energy_after_kwh
-                * CARBON_INTENSITY_KG_PER_KWH
+                * emission_factor
             )
 
             # ------------------------------------------------
@@ -1350,7 +1354,8 @@ def calculate_what_if(
 
             result["assumptions"].append(
                 f"Carbon = energy × "
-                f"{CARBON_INTENSITY_KG_PER_KWH:.2f} kg CO₂/kWh."
+                f"{emission_factor:.3f} kg CO₂/kWh (grid emission factor "
+                "from site settings)."
             )
 
             result["assumptions"].append(

@@ -37,13 +37,13 @@
   ],
   "target": "cpu_utilization at 15 minutes in the future",
   "horizon_minutes": 15,
-  "source_rows": 11899,
+  "source_rows": 12569,
   "training_samples": 7741,
   "train_samples": 6192,
   "test_samples": 1549,
   "training_from": "2026-09-05T07:55:28.228270",
   "training_to": "2026-09-09T17:57:41.804843",
-  "trained_at": "2026-09-11T12:36:01.012715",
+  "trained_at": "2026-09-13T14:34:12.149277",
   "selection_rule": "A complex model must beat Linear Regression by more than 5% relative MAE to be selected.",
   "limitation": "Forecast continues observed patterns; it cannot anticipate one-off traffic spikes or failures."
 }

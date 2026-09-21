@@ -63,6 +63,17 @@ LONG_METRICS_FILENAME = "forecast_1h_metrics.json"
 LONG_MODEL_PATH = os.path.join(MODEL_DIR, LONG_MODEL_FILENAME)
 LONG_METRICS_PATH = os.path.join(MODEL_DIR, LONG_METRICS_FILENAME)
 
+# 1-hour memory forecast -- trained for reporting parity with the 1-hour CPU
+# model (same reason the 15-minute tier keeps CPU and memory as independently
+# visible model files, see MEMORY_MODEL_PATH above). Not currently consumed
+# by any endpoint -- the Server Detail dashboard's 1h/6h/24h card only shows
+# CPU -- this exists purely so "workload forecasting" results can be reported
+# consistently across both targets at the same horizon.
+LONG_MEMORY_MODEL_FILENAME = "workload_forecast_1h_memory_model.joblib"
+LONG_MEMORY_METRICS_FILENAME = "forecast_1h_memory_metrics.json"
+LONG_MEMORY_MODEL_PATH = os.path.join(MODEL_DIR, LONG_MEMORY_MODEL_FILENAME)
+LONG_MEMORY_METRICS_PATH = os.path.join(MODEL_DIR, LONG_MEMORY_METRICS_FILENAME)
+
 # long_horizon_forecast() gating -- refuse to answer rather than guess from
 # too little history. Needs real coverage of at least half the requested
 # window, and a minimum sample count so a couple of stray readings can't
@@ -348,6 +359,13 @@ def load_long_forecast_metrics() -> dict:
     if not os.path.exists(LONG_METRICS_PATH):
         return {}
     with open(LONG_METRICS_PATH) as file:
+        return json.load(file)
+
+
+def load_long_forecast_memory_metrics() -> dict:
+    if not os.path.exists(LONG_MEMORY_METRICS_PATH):
+        return {}
+    with open(LONG_MEMORY_METRICS_PATH) as file:
         return json.load(file)
 
 

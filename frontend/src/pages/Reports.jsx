@@ -14,6 +14,7 @@ import {
 } from "recharts";
 
 import api from "../api";
+import ComplianceReadiness from "./ComplianceReadiness";
 
 /* ==========================================================================
    1. UTILITY FUNCTIONS
@@ -1890,6 +1891,13 @@ export default function Reports() {
                 report?.decisions || []
               }
             />
+
+
+            {/* ============================================================
+                COMPLIANCE READINESS (follows the selected date range)
+            ============================================================ */}
+
+            <ComplianceReadiness days={days} onSettingsSaved={() => load(days)} />
 
 
             {/* ============================================================

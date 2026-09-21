@@ -35,6 +35,7 @@ from . import (
     rules_engine,
     forecasting,
     recommendations,
+    compliance,
 )
 from .database import engine, get_db, Base
 from .auth import (
@@ -224,7 +225,8 @@ def delete_user(
     db.commit()
 
 TARIFF_PER_KWH = 8.0          # placeholder tariff, currency-agnostic
-CARBON_INTENSITY_KG_PER_KWH = 0.5   # placeholder regional average, see notes
+# Grid emission factor is no longer a constant here: every carbon figure reads
+# compliance.emission_factor(db), the configurable, sourced value in site_settings.
 WUE_WINDOW_HOURS = 1          # window for the WUE *rate* (L/kWh) -- keeps it a stable ratio, not a running total
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "ml_artifacts")
@@ -480,6 +482,7 @@ def server_detail(server_id: str, db: Session = Depends(get_db)):
         "server_id": server_id,
         "server_type": server.server_type,
         "region": server.datacenter_region,
+        "emission_factor_kg_per_kwh": compliance.emission_factor(db),
         "power": {
             "it_power_kw": latest_power.it_power_kw,
             "facility_power_kw": latest_power.facility_power_kw,
@@ -971,7 +974,8 @@ def analytics_summary(db: Session = Depends(get_db)):
     energy_by_server = rules_engine.compute_energy_by_server(db)
     energy_kwh = round(sum(energy_by_server.values()), 4)
     cost = round(energy_kwh * TARIFF_PER_KWH, 2)
-    carbon_kg = round(energy_kwh * CARBON_INTENSITY_KG_PER_KWH, 2)
+    emission_factor = compliance.emission_factor(db)
+    carbon_kg = round(energy_kwh * emission_factor, 2)
 
     # Weighted by each server's OWN cooling type and its own share of energy
     # use -- not by whichever single cooling reading happened to post last
@@ -1010,6 +1014,7 @@ def analytics_summary(db: Session = Depends(get_db)):
         "estimated_energy_kwh": round(energy_kwh, 2),
         "estimated_cost": cost,
         "estimated_carbon_kg": carbon_kg,
+        "emission_factor_kg_per_kwh": emission_factor,
         "total_water_l": total_water_l,
         "wue_l_per_kwh": wue["rate_l_per_kwh"],
         "wue_window_hours": wue["window_hours"],
@@ -1060,6 +1065,7 @@ def analytics_daily(
     ``no_data`` rather than filled with synthetic values.
     """
     days = max(1, min(days, 31))
+    emission_factor = compliance.emission_factor(db)
     today = datetime.utcnow().date()
     start_date = today - timedelta(days=days - 1)
     cutoff = datetime.combine(start_date, datetime.min.time())
@@ -1188,7 +1194,7 @@ def analytics_daily(
                 "storage_utilization_pct": round(storage_used / storage_total * 100, 2) if storage_total else None,
                 "energy_kwh": server_energy,
                 "estimated_cost": round(server_energy * TARIFF_PER_KWH, 2),
-                "estimated_carbon_kg": round(server_energy * CARBON_INTENSITY_KG_PER_KWH, 2),
+                "estimated_carbon_kg": round(server_energy * emission_factor, 2),
                 "estimated_water_l": round(server_energy * water_factor, 2),
                 "observations": len(server_values.get("cpu", [])) + len(power_values.get("facility", [])),
             })
@@ -1208,7 +1214,7 @@ def analytics_daily(
             "pue": day_pue if all_it and all_facility else None,
             "energy_kwh": round(day_energy, 4),
             "estimated_cost": round(day_energy * TARIFF_PER_KWH, 2),
-            "estimated_carbon_kg": round(day_energy * CARBON_INTENSITY_KG_PER_KWH, 2),
+            "estimated_carbon_kg": round(day_energy * emission_factor, 2),
             "estimated_water_l": round(sum(item["estimated_water_l"] for item in server_breakdown), 2),
             "server_breakdown": server_breakdown,
         })
@@ -1227,7 +1233,7 @@ def analytics_daily(
         "avg_pue": _safe_average(pue_values),
         "total_energy_kwh": round(total_energy, 2),
         "estimated_cost": round(total_energy * TARIFF_PER_KWH, 2),
-        "estimated_carbon_kg": round(total_energy * CARBON_INTENSITY_KG_PER_KWH, 2),
+        "estimated_carbon_kg": round(total_energy * emission_factor, 2),
         "peak_cpu_day": max(observed_days, key=lambda row: row["avg_cpu"] or -1)["date"] if observed_days else None,
         "peak_power_day": max(observed_days, key=lambda row: row["avg_facility_power_kw"] or -1)["date"] if observed_days else None,
     }
@@ -1340,7 +1346,9 @@ def _esg_report_data(days: int, db: Session) -> dict:
 
     energy_kwh = round(sum(energy_by_server.values()), 2)
     cost = round(energy_kwh * TARIFF_PER_KWH, 2)
-    carbon_kg = round(energy_kwh * CARBON_INTENSITY_KG_PER_KWH, 2)
+    site_settings = compliance.get_site_settings(db)
+    emission_factor = float(site_settings.grid_emission_factor_kg_per_kwh)
+    carbon_kg = round(energy_kwh * emission_factor, 2)
 
     cooling_type_by_server = dict(
         db.query(models.Server.server_id, models.Server.cooling_type).all()
@@ -1481,7 +1489,7 @@ def _esg_report_data(days: int, db: Session) -> dict:
         daily.append({
             "date": date_string,
             "energy_kwh": round(day_energy, 4),
-            "carbon_kg": round(day_energy * CARBON_INTENSITY_KG_PER_KWH, 4),
+            "carbon_kg": round(day_energy * emission_factor, 4),
             "cost": round(day_energy * TARIFF_PER_KWH, 2),
             "water_liters": None,
             "avg_cpu": _safe_average(day_cpu),
@@ -1546,6 +1554,11 @@ def _esg_report_data(days: int, db: Session) -> dict:
         },
         # Top-level alias kept for KPI components that read report.avg_pue directly.
         "avg_pue": avg_pue,
+        "factors": {
+            "emission_factor_kg_per_kwh": emission_factor,
+            "emission_factor_source": site_settings.emission_factor_source,
+            "tariff_per_kwh": TARIFF_PER_KWH,
+        },
         "optimization_impact": optimization_impact,
         "decision_counts": {
             "accepted": len(accepted),
@@ -1610,7 +1623,9 @@ def esg_report_export(days: int = 30, db: Session = Depends(get_db)):
     writer.writerow(["Carbon (kg)", env["carbon_kg"]])
     writer.writerow(["Estimated cost", env["cost"]])
     writer.writerow(["Estimated water (L)", env["water_liters"]])
-    writer.writerow(["WUE (L/kWh)", env["wue"]])
+    writer.writerow(["WUE (L/kWh, water / IT energy)", env["wue"]])
+    writer.writerow(["Grid emission factor (kg CO2e/kWh)", data["factors"]["emission_factor_kg_per_kwh"]])
+    writer.writerow(["Emission factor source", data["factors"]["emission_factor_source"]])
     writer.writerow([])
 
     writer.writerow(["OPERATIONAL EFFICIENCY"])
@@ -1928,8 +1943,8 @@ def esg_report_export_pdf(days: int = 30, db: Session = Depends(get_db)):
     methodology = [
         f"Energy is estimated by integrating facility power across adjacent telemetry readings within the configured interval guard ({rules_engine.MAX_INTERVAL_HOURS} hours).",
         f"Estimated cost uses a configured tariff of {TARIFF_PER_KWH:.2f} per kWh.",
-        f"Estimated carbon uses a configured carbon intensity of {CARBON_INTENSITY_KG_PER_KWH:.2f} kg CO2e per kWh.",
-        "Water usage is an estimate weighted by the cooling type associated with each server.",
+        f"Estimated carbon uses a grid emission factor of {data['factors']['emission_factor_kg_per_kwh']:.3f} kg CO2e per kWh ({data['factors']['emission_factor_source']}).",
+        "Water usage is an estimate weighted by the cooling type associated with each server. WUE is that estimated water divided by IT equipment energy over the same window.",
         "PUE is facility power divided by IT power over the same observed window.",
         "Operator decisions are recommendations recorded for human review; GreenOps does not directly control physical infrastructure.",
     ]
@@ -1951,6 +1966,63 @@ def esg_report_export_pdf(days: int = 30, db: Session = Depends(get_db)):
             f"attachment; filename=greenops_esg_report_{days}d.pdf"
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Compliance readiness
+#
+# Maps telemetry onto external framework indicator definitions and reports,
+# per indicator, whether GreenOps can provide it and how trustworthy it is.
+# Alignment with a framework's definitions, NOT a compliance declaration.
+# Declared inputs (emission factor, capacity, REF, ERF) live in site_settings.
+# ---------------------------------------------------------------------------
+
+@app.get("/compliance/frameworks")
+def compliance_frameworks(current_user: models.User = Depends(get_current_user)):
+    return compliance.list_frameworks()
+
+
+# Registered before /compliance/{framework_id} so "settings" is never read as a framework id.
+@app.get("/compliance/settings")
+def get_compliance_settings(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return compliance.settings_to_dict(compliance.get_site_settings(db))
+
+
+@app.put("/compliance/settings")
+def update_compliance_settings(
+    payload: schemas.SiteSettingsIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("infrastructure_manager")),
+):
+    """Update the emission factor and declared inputs. Infrastructure Manager only."""
+    row = compliance.get_site_settings(db)
+    row.grid_emission_factor_kg_per_kwh = payload.grid_emission_factor_kg_per_kwh
+    row.emission_factor_source = payload.emission_factor_source.strip()
+    row.installed_it_capacity_kw = payload.installed_it_capacity_kw
+    row.renewable_energy_factor = payload.renewable_energy_factor
+    row.energy_reuse_factor = payload.energy_reuse_factor
+    row.telemetry_simulated = payload.telemetry_simulated
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(row)
+    return compliance.settings_to_dict(row)
+
+
+@app.get("/compliance/{framework_id}")
+def compliance_report(
+    framework_id: str,
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    report = compliance.evaluate_framework(db, framework_id, days)
+    if report is None:
+        known = ", ".join(sorted(compliance.FRAMEWORKS))
+        raise HTTPException(status_code=404, detail=f"Unknown framework. Available: {known}")
+    return report
 
 
 @app.get("/")

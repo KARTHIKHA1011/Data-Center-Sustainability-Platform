@@ -215,6 +215,22 @@ export const api = {
   `${API_BASE}/reports/esg/export/pdf?days=${days}`,
 
   // ----------------------------------------------------------
+  // COMPLIANCE READINESS
+  // ----------------------------------------------------------
+
+  complianceFrameworks: () =>
+    client.get("/compliance/frameworks"),
+
+  complianceReport: (frameworkId, days = 30) =>
+    client.get(`/compliance/${frameworkId}`, { params: { days } }),
+
+  complianceSettings: () =>
+    client.get("/compliance/settings"),
+
+  updateComplianceSettings: (payload) =>
+    client.put("/compliance/settings", payload),
+
+  // ----------------------------------------------------------
   // OPERATOR ACTIONS
   // ----------------------------------------------------------
 

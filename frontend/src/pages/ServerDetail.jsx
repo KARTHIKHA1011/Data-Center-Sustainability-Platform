@@ -370,9 +370,11 @@ export default function ServerDetail() {
     ? WUE_FACTORS[cooling.cooling_type] ?? 0.5
     : null;
 
+  const emissionFactor = detail?.emission_factor_kg_per_kwh ?? null;
+
   const hourlyCarbonKg =
-    facilityPowerKw !== null
-      ? (facilityPowerKw * 0.5).toFixed(2)
+    facilityPowerKw !== null && emissionFactor !== null
+      ? (facilityPowerKw * emissionFactor).toFixed(2)
       : null;
 
   const hourlyWaterLiters =
@@ -1378,7 +1380,7 @@ export default function ServerDetail() {
           </div>
 
           <div className="env-subtext">
-            At 0.5 kg CO₂/kWh grid factor, if
+            At {emissionFactor ?? "—"} kg CO₂/kWh grid factor, if
             sustained for an hour
           </div>
         </div>
