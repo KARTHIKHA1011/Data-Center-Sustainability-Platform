@@ -1,6 +1,6 @@
 %%{init: {"flowchart": {"htmlLabels": false}}}%%
 flowchart TD
-    START2(["Start: pending recommendation —<br/>from Activity Diagram 1"]) --> I{"Recommendation type"}
+    START2(["Start: pending recommendation"]) --> I{"Recommendation type"}
     I -- consolidate --> J["Rank same-type candidates:<br/>CPU / memory / network / thermal<br/>+ forecast check"]
     I -- "archive / dedupe / rightsize" --> K["Estimate storage impact"]
     J --> L{"Safe candidate found?"}
