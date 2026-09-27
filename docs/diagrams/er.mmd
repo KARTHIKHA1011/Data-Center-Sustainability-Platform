@@ -1,0 +1,119 @@
+erDiagram
+    SERVER {
+        int id PK
+        string server_id
+        string server_type
+        string cooling_type
+        string datacenter_region
+    }
+    SERVER_TELEMETRY {
+        int id PK
+        string server_id
+        float cpu_utilization
+        float memory_utilization
+        float network_throughput_gbps
+        float workload_intensity
+        datetime timestamp
+    }
+    POWER_TELEMETRY {
+        int id PK
+        string server_id
+        float it_power_kw
+        float facility_power_kw
+        datetime timestamp
+    }
+    COOLING_TELEMETRY {
+        int id PK
+        string server_id
+        float inlet_temperature_c
+        float cooling_efficiency
+        string cooling_type
+        datetime timestamp
+    }
+    STORAGE_TELEMETRY {
+        int id PK
+        string server_id
+        float total_storage_gb
+        float used_storage_gb
+        float duplicate_data_gb
+        int last_accessed_days_ago
+        string storage_type
+        datetime timestamp
+    }
+    FORECAST {
+        int id PK
+        string server_id
+        int horizon_minutes
+        float measured_cpu
+        float predicted_cpu
+        string method
+        datetime generated_at
+    }
+    FLAG {
+        int id PK
+        string server_id
+        string flag_type
+        string severity
+        float metric_value
+        int resolved
+        datetime created_at
+    }
+    RECOMMENDATION {
+        int id PK
+        int flag_id
+        string server_id
+        string recommendation_type
+        string priority
+        string status
+        datetime created_at
+        datetime snoozed_until
+    }
+    OPERATOR_ACTION {
+        int id PK
+        int recommendation_id
+        string server_id
+        string target_server_id
+        string action
+        float estimated_energy_saving_kwh
+        float estimated_carbon_reduction_kg
+        float estimated_cost_saving
+        datetime executed_at
+        int decided_by_user_id
+        datetime created_at
+    }
+    USER {
+        int id PK
+        string employee_id
+        string name
+        string email
+        string role
+        bool is_active
+    }
+    SITE_SETTINGS {
+        int id PK
+        float grid_emission_factor_kg_per_kwh
+        string emission_factor_source
+        float installed_it_capacity_kw
+        float renewable_energy_factor
+        float energy_reuse_factor
+        bool telemetry_simulated
+    }
+    PREFERENCES {
+        int id PK
+        float energy_weight
+        float cost_weight
+        float carbon_weight
+        float water_weight
+        float risk_weight
+    }
+
+    SERVER ||--o{ SERVER_TELEMETRY : posts
+    SERVER ||--o{ POWER_TELEMETRY : posts
+    SERVER ||--o{ COOLING_TELEMETRY : posts
+    SERVER ||--o{ STORAGE_TELEMETRY : posts
+    SERVER ||--o{ FORECAST : "forecast for"
+    SERVER ||--o{ FLAG : raises
+    FLAG ||--|| RECOMMENDATION : generates
+    RECOMMENDATION ||--o{ OPERATOR_ACTION : "decided via"
+    SERVER ||--o{ OPERATOR_ACTION : "source of"
+    USER ||--o{ OPERATOR_ACTION : "decided by"

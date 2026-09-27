@@ -796,6 +796,7 @@ def recommendation_action(
             payload.notes,
             snooze_hours=payload.snooze_hours or 24,
             power_model=_power_model,
+            target_server_id=payload.target_server_id,
         )
 
     except ValueError as exc:

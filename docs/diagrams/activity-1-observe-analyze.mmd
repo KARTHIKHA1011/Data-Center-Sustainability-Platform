@@ -1,0 +1,14 @@
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
+flowchart TD
+    START(["Start: telemetry cycle"]) --> A["Simulators post readings<br/>every 15–30s"]
+    A --> B["FastAPI validates and stores telemetry"]
+    B --> C{"Duplicate reading<br/>within 2s?"}
+    C -- yes --> IGNORE["Ignore, mark duplicate_ignored"]
+    IGNORE --> END1(["End"])
+    C -- no --> D["Rule engine evaluates<br/>idle / stale / duplicate / overprovisioned"]
+    D --> E{"Any condition met?"}
+    E -- no --> F["Resolve any existing flag<br/>for that condition"]
+    F --> END2(["End"])
+    E -- yes --> G["Raise or update Flag"]
+    G --> H["Sync recommendations<br/>from active flags"]
+    H --> HANDOFF(["Recommendation queued as pending —<br/>continues in Activity Diagram 2"])

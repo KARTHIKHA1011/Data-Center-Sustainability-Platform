@@ -75,7 +75,7 @@ def calculate_priority(flag):
 # Create / update recommendations
 # ------------------------------------------------------------
 
-def sync_recommendations(db: Session):
+def sync_recommendations(db: Session, power_model=None):
     """
     Convert every active Flag into a Recommendation.
 
@@ -166,6 +166,23 @@ def sync_recommendations(db: Session):
 
     for recommendation in withdrawn:
         recommendation.status = "withdrawn"
+
+    # Evaluate consolidation recommendations before they become actionable.
+    # The row may be created in this transaction, but an unsafe recommendation
+    # must never remain in the pending state merely because forecast evaluation
+    # happens after flag synchronization.
+    db.flush()
+    for recommendation in (
+        db.query(models.Recommendation)
+        .filter(
+            models.Recommendation.flag_id.in_(active_flag_ids),
+            models.Recommendation.recommendation_type == "consolidate",
+            models.Recommendation.status.in_(("pending", "blocked")),
+        )
+        .all()
+    ):
+        impact = calculate_what_if(db, recommendation, power_model=power_model)
+        recommendation.status = "pending" if impact.get("safe") is True else "blocked"
 
     db.commit()
 
@@ -489,10 +506,10 @@ def _rank_consolidation_candidates(
             forecast_post_move_cpu = None
             forecast_post_move_memory = None
 
-            # No forecast yet (not enough history) -- don't let
-            # missing data block a recommendation the snapshot
-            # check already approved.
-            safe_forecast = True
+            # Missing forecast data is uncertainty, not evidence of safety.
+            # A consolidation stays blocked until the target has enough
+            # recent history for its own near-term forecast.
+            safe_forecast = False
             headroom_used_forecast = headroom_used_now
 
         # A candidate only counts as safe when both checks agree.
@@ -550,6 +567,7 @@ def calculate_what_if(
     db: Session,
     recommendation,
     power_model=None,
+    target_server_id=None,
 ):
     """
     Estimate the environmental and resource impact of applying
@@ -613,6 +631,14 @@ def calculate_what_if(
     above) but degrades gracefully to a formula-only estimate when
     the model or target cooling telemetry isn't available -- this
     function never raises just because the model is missing.
+
+    "safe" for a consolidation requires BOTH sides to check out, not just
+    the target: the source's own near-term forecast must show it staying
+    under its idle threshold (source_safe_forecast), AND a candidate target
+    must pass its own current + forecast safety check (see
+    _rank_consolidation_candidates()). A safe target existing is not
+    enough on its own -- if the source itself is forecast to get busy
+    again soon, the move isn't recommended even though a target was found.
     """
 
     server_id = recommendation.server_id
@@ -661,6 +687,16 @@ def calculate_what_if(
         "safe": None,
         "risk_score": None,
 
+        # Source's own near-term forecast -- "will the flagged server
+        # itself still be idle by the time this move would happen," the
+        # mirror-image question to the candidate check below. See
+        # calculate_what_if()'s consolidation branch for how this gates
+        # the final "safe" verdict.
+        "source_forecast_available": False,
+        "source_predicted_cpu": None,
+        "source_idle_threshold": None,
+        "source_safe_forecast": None,
+
         # ----------------------------------------------------
         # Explanation
         # ----------------------------------------------------
@@ -707,6 +743,65 @@ def calculate_what_if(
             )
 
             return result
+
+        # ----------------------------------------------------
+        # Source's own near-term forecast
+        #
+        # A source can look idle right now (that's how it got flagged --
+        # a 6h historical average) and still be a bad consolidation pick
+        # if it's about to get busy again on its own. This reuses
+        # forecast_candidate_server() -- the same trained 15-minute model
+        # already used for target candidates below -- since that function
+        # has no idle gate and generalizes to any server, unlike
+        # forecast_server() (the Server Detail dashboard's 1h/6h/24h
+        # forecast), which is gated on idle_eligibility() and only
+        # supports the operator-facing horizons. Using the same model and
+        # horizon on both sides keeps the source and target checks on
+        # equal footing.
+        # ----------------------------------------------------
+
+        source_forecast = forecasting.forecast_candidate_server(
+            db,
+            source_server.server_id,
+        )
+
+        source_forecast_available = bool(
+            source_forecast.get("eligible")
+            and source_forecast.get("predicted_cpu") is not None
+        )
+
+        source_idle_threshold = rules_engine.get_idle_threshold(
+            source_server.server_type
+        )
+
+        result["source_idle_threshold"] = round(source_idle_threshold, 2)
+        result["source_forecast_available"] = source_forecast_available
+
+        if source_forecast_available:
+
+            source_predicted_cpu = source_forecast["predicted_cpu"]
+
+            result["source_predicted_cpu"] = round(source_predicted_cpu, 2)
+
+            # Same convention as the candidate-side forecast check: the
+            # source only counts as forecast-safe when it's predicted to
+            # stay under its own type's idle threshold, not just under
+            # the (much looser) 75% consolidation safety limit -- staying
+            # busy-but-under-75% still isn't "idle," and this recommendation
+            # exists only because the source was flagged idle in the first
+            # place.
+            source_safe_forecast = source_predicted_cpu < source_idle_threshold
+
+        else:
+
+            source_predicted_cpu = None
+
+            # Missing data is uncertainty, not evidence the source will
+            # stay idle -- same convention already used for candidate
+            # targets (see _rank_consolidation_candidates() above).
+            source_safe_forecast = False
+
+        result["source_safe_forecast"] = source_safe_forecast
 
         # ----------------------------------------------------
         # Find and rank target candidates
@@ -808,12 +903,36 @@ def calculate_what_if(
             result["safe"] = False
             result["risk_score"] = 1.0
 
+            if not source_safe_forecast:
+                result["assumptions"].append(
+                    (
+                        f"{server_id}'s own near-term forecast predicts "
+                        f"{source_predicted_cpu:.1f}% CPU in "
+                        f"{forecasting.FORECAST_HORIZON_MINUTES} minutes, at "
+                        f"or above its own idle threshold of "
+                        f"{source_idle_threshold:.1f}% -- it may not stay "
+                        "idle long enough for this move to matter."
+                    )
+                    if source_forecast_available
+                    else (
+                        f"{server_id} doesn't have enough history yet for a "
+                        "near-term forecast of its own, so it wasn't confirmed "
+                        "to still be idle by the time a move would happen."
+                    )
+                )
+
             if ranked:
 
                 rejected_only_by_forecast = sum(
                     1
                     for c in ranked
-                    if c["safe_now"] and not c["safe_forecast"]
+                    if c["safe_now"]
+                    and not c["safe_forecast"]
+                    and c["forecast_available"]
+                )
+
+                missing_forecast = sum(
+                    1 for c in ranked if not c["forecast_available"]
                 )
 
                 rejected_by_network = sum(
@@ -841,6 +960,14 @@ def calculate_what_if(
                         f"shows them crossing {SAFETY_LIMIT_PERCENT:.0f}% "
                         "on their own, independent of this move -- see "
                         "each candidate's forecast columns above."
+                    )
+
+                if missing_forecast:
+
+                    result["assumptions"].append(
+                        f"{missing_forecast} candidate(s) lacked enough recent "
+                        "history for a near-term forecast and were blocked "
+                        "rather than treated as safe."
                     )
 
                 if rejected_by_network:
@@ -878,7 +1005,23 @@ def calculate_what_if(
         # Best safe candidate
         # ----------------------------------------------------
 
-        best = safe_candidates[0]
+        if target_server_id is not None:
+            selected = next(
+                (candidate for candidate in safe_candidates
+                 if candidate["server"].server_id == target_server_id),
+                None,
+            )
+            if selected is None:
+                result["safe"] = False
+                result["risk_score"] = 1.0
+                result["assumptions"].append(
+                    f"Selected target {target_server_id} is not a currently safe "
+                    "candidate; the consolidation was not approved."
+                )
+                return result
+            best = selected
+        else:
+            best = safe_candidates[0]
 
         target = best["server"]
 
@@ -890,7 +1033,35 @@ def calculate_what_if(
 
         result["target_server_id"] = target.server_id
 
-        result["safe"] = True
+        # A safe target alone isn't enough -- the source itself must also
+        # be forecast to still be idle by the time this move would happen.
+        # Without this, a source that's about to get busy again on its own
+        # could get recommended for consolidation purely because a target
+        # happened to have room, which defeats the point of the move.
+        result["safe"] = source_safe_forecast
+
+        if source_safe_forecast:
+            result["assumptions"].append(
+                f"{server_id}'s own near-term forecast predicts "
+                f"{source_predicted_cpu:.1f}% CPU in "
+                f"{forecasting.FORECAST_HORIZON_MINUTES} minutes, still under "
+                f"its {source_idle_threshold:.1f}% idle threshold -- it isn't "
+                "just historically idle, it's forecast to stay that way."
+            )
+        elif source_forecast_available:
+            result["assumptions"].append(
+                f"A safe target ({target.server_id}) exists, but {server_id}'s "
+                f"own near-term forecast predicts {source_predicted_cpu:.1f}% "
+                f"CPU in {forecasting.FORECAST_HORIZON_MINUTES} minutes -- at "
+                f"or above its {source_idle_threshold:.1f}% idle threshold -- "
+                "so this consolidation is not currently recommended."
+            )
+        else:
+            result["assumptions"].append(
+                f"A safe target ({target.server_id}) exists, but {server_id} "
+                "doesn't have enough history yet for its own near-term "
+                "forecast, so this consolidation is not currently recommended."
+            )
 
         if best["forecast_available"]:
 
@@ -907,8 +1078,7 @@ def calculate_what_if(
 
             result["assumptions"].append(
                 f"{target.server_id} doesn't have enough history yet for a "
-                "near-term forecast -- this candidate was judged on its "
-                "current snapshot only."
+                "near-term forecast, so it was not treated as safe."
             )
 
         # Risk score:
@@ -1611,7 +1781,7 @@ def get_recommendations(
     power_model=None,
 ):
 
-    sync_recommendations(db)
+    sync_recommendations(db, power_model=power_model)
 
     query = db.query(
         models.Recommendation
@@ -1659,6 +1829,7 @@ def record_operator_action(
     notes=None,
     snooze_hours: float = 24,
     power_model=None,
+    target_server_id=None,
 ):
     """
     Record the operator's decision on a recommendation.
@@ -1686,6 +1857,19 @@ def record_operator_action(
         raise ValueError(
             "Invalid operator action. "
             "Choose consolidate, rightsize, snooze, or do_nothing."
+        )
+
+    impact = calculate_what_if(
+        db,
+        recommendation,
+        power_model=power_model,
+        target_server_id=target_server_id if action == "consolidate" else None,
+    )
+
+    if action == "consolidate" and impact.get("safe") is not True:
+        raise ValueError(
+            "Consolidation cannot be approved because the selected target "
+            "did not pass the current safety and forecast checks."
         )
 
     if action == "consolidate":
@@ -1736,12 +1920,6 @@ def record_operator_action(
     # --------------------------------------------------------
     # Snapshot the impact estimate at decision time.
     # --------------------------------------------------------
-
-    impact = calculate_what_if(
-        db,
-        recommendation,
-        power_model=power_model,
-    )
 
     operator_action = models.OperatorAction(
         recommendation_id=recommendation.id,

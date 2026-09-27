@@ -1,0 +1,73 @@
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
+flowchart LR
+    subgraph SIM["Simulators — external data sources"]
+        SM["server_monitor.py"]
+        PM["power_monitor.py"]
+        CM["cooling_monitor.py"]
+        STM["storage_monitor.py"]
+    end
+
+    ING["Telemetry ingestion<br/>POST /telemetry/*<br/>(Pydantic validation)"]
+    DUP{"Duplicate reading<br/>within 2s?"}
+
+    subgraph DB1["PostgreSQL — telemetry tables"]
+        T1[("server_telemetry")]
+        T2[("power_telemetry")]
+        T3[("cooling_telemetry")]
+        T4[("storage_telemetry")]
+    end
+
+    RULE["Rule Engine<br/>rules_engine.py"]
+    FLAGS[("flags")]
+    FORE["Forecasting<br/>forecasting.py"]
+    ML[("ML artifacts<br/>CPU / power / forecast models")]
+    REC["Recommendation Engine<br/>recommendations.py"]
+    RECT[("recommendations")]
+    ANALYTICS["Analytics aggregation<br/>PUE / WUE / energy / cost"]
+    COMP["Compliance layer<br/>compliance.py"]
+    SETT[("site_settings")]
+
+    UI["React dashboard"]
+    OPACT["Operator action endpoint"]
+    ACTT[("operator_actions")]
+    ESG["ESG report +<br/>compliance readiness"]
+    OP(["Operator"])
+
+    SM -->|"cpu, memory, network, workload"| ING
+    PM -->|"it_power, facility_power"| ING
+    CM -->|"inlet_temp, cooling_efficiency"| ING
+    STM -->|"capacity, staleness, duplication"| ING
+
+    ING --> DUP
+    DUP -->|"new reading"| T1
+    DUP --> T2
+    DUP --> T3
+    DUP --> T4
+    DUP -.->|"duplicate_ignored"| ING
+
+    T1 --> RULE
+    T3 --> RULE
+    T4 --> RULE
+    RULE --> FLAGS
+    FLAGS --> REC
+    REC <--> FORE
+    FORE <--> ML
+    REC <--> ML
+    REC --> RECT
+
+    T1 --> ANALYTICS
+    T2 --> ANALYTICS
+    T3 --> ANALYTICS
+    ANALYTICS --> COMP
+    SETT --> COMP
+
+    RECT --> UI
+    COMP --> UI
+    ANALYTICS --> UI
+    OP --> UI
+    UI -->|"accept / snooze / dismiss"| OPACT
+    OPACT --> ACTT
+    RECT --> ESG
+    ACTT --> ESG
+    SETT --> ESG
+    ESG --> UI

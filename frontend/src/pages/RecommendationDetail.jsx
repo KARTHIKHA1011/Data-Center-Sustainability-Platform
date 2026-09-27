@@ -478,7 +478,13 @@ export default function RecommendationDetail() {
   const handleAction = async (action, snoozeHours) => {
     try {
       setActLoad(true);
-      await api.recommendationAction(id, action, "", snoozeHours);
+      await api.recommendationAction(
+        id,
+        action,
+        "",
+        snoozeHours,
+        action === "consolidate" ? selectedCandidateId : null,
+      );
       // Capture a decision snapshot to show the confirmation screen
       setDecision({
         action,

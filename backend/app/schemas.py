@@ -106,6 +106,7 @@ class ServerRegisterIn(BaseModel):
 class OperatorActionIn(BaseModel):
     action: str
     notes: Optional[str] = None
+    target_server_id: Optional[str] = None
     snooze_hours: Optional[float] = Field(default=24, gt=0, le=24 * 30)
 
 

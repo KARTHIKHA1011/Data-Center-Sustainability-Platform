@@ -522,16 +522,52 @@ Used by `_rank_consolidation_candidates()` below — not used anywhere else.
    own — the snapshot check alone has no way to see that. When a forecast
    isn't available yet (not enough history for that specific candidate —
    this can flip per-request on a live system near a data gap), the
-   forecast check is skipped rather than treated as a failure; missing data
-   shouldn't block a recommendation the snapshot check already approved.
+   candidate is treated as **not safe**, the same as a genuine forecast
+   failure — missing data is uncertainty, not evidence of safety, so it
+   never silently passes on the snapshot check alone. (An earlier version
+   of this doc said the opposite — that a missing forecast was skipped
+   rather than treated as a failure. That was never what the code did;
+   corrected here rather than left as a stale claim.)
    Exposed per-candidate as `safe_now`/`safe_forecast`/`forecast_available`/
    `forecast_predicted_cpu`/`forecast_predicted_memory`, and
    `RecommendationDetail.jsx` shows a distinct "Risky soon" badge for a
    candidate that passed the current check but failed the forecast one.
-3. The top-ranked **safe** candidate is the one actually used for the impact
+3. **The source itself is forecast-checked too, not just the target.**
+   Added this session after realizing the two-sided check the project had
+   always intended for consolidation — forecast the source AND the
+   target, recommend only if both pass — was only ever half-built: the
+   target side existed (point 2 above), but nothing ever asked whether the
+   flagged (idle) source would still be idle by the time a move happened.
+   A server is flagged purely from a 6h historical average (see the rule
+   table above); that says nothing about the next 15 minutes. Fixed in
+   `calculate_what_if()`'s consolidation branch: it now calls
+   `forecasting.forecast_candidate_server()` — the same trained 15-minute
+   model already used for targets, reused here specifically because it has
+   no idle gate (unlike `forecast_server()`, the Server Detail dashboard's
+   1h/6h/24h forecast, which is gated on `idle_eligibility()` and only
+   supports the operator-facing horizons) — on the **source**, and compares
+   its predicted CPU against its own type's idle threshold
+   (`rules_engine.get_idle_threshold()`), not the looser 75% consolidation
+   limit. Same missing-data convention as the target side: no forecast
+   history yet means not confirmed safe, not "assumed fine." Exposed as
+   `source_forecast_available`/`source_predicted_cpu`/
+   `source_idle_threshold`/`source_safe_forecast`. The final `safe`
+   verdict is now `source_safe_forecast AND` (a safe target exists) — a
+   safe target alone is no longer sufficient; a real, live case was found
+   and verified where a safe target existed but the recommendation was
+   correctly withheld once the source's own forecast was made to predict
+   a rise back above its idle threshold.
+   **Real side effect worth knowing**: a source with too little history
+   for its own 15-minute forecast (roughly the first 20-25 minutes after
+   a fresh restart, since the lag features need up to a 20-minute lookback)
+   now starts every consolidate recommendation as `blocked` rather than
+   `pending`, even with a perfectly good target available, until it
+   accumulates enough history to be forecast-confirmed. This mirrors the
+   target side's existing behavior, not a new class of caution.
+4. The top-ranked **safe** candidate is the one actually used for the impact
    estimate below it; if none qualify, `"safe": false` with a stated reason
    — never silently approved.
-4. Energy/cost/carbon/water savings prefer the **trained power model's
+5. Energy/cost/carbon/water savings prefer the **trained power model's
    prediction** for the target's full post-move profile (CPU, memory,
    network, cooling) — scaled from predicted IT power to facility power by
    the target's current PUE. This is the primary basis for `energy_after`
@@ -590,8 +626,11 @@ Used by `_rank_consolidation_candidates()` below — not used anywhere else.
    or it would silently corrupt it by mixing two different data-generating
    regimes. Check `power_monitor.py`'s git history / a timestamp cutoff
    before trusting any bulk export of `power_telemetry` for that purpose.
-5. **"Safe" means CPU, memory, network, and thermal — widened this
-   session, still not everything.** Precisely, by dimension:
+6. **"Safe" means CPU, memory, network, and thermal — widened this
+   session, still not everything.** Precisely, by dimension. (This is about
+   the *target's* safety dimensions; the source-forecast check in point 3
+   above is a separate, additional gate on the source, not a fifth
+   dimension of this list.)
    - **CPU / memory** — compared against `SAFETY_LIMIT_PERCENT` (75%), both
      for the current-snapshot check (`safe_now`) and the forecast check
      (`safe_forecast`, point 2 above).
@@ -1065,7 +1104,7 @@ re-verified live:**
     Alembic, and along the way found two real bugs before they shipped.**
     Network throughput and predicted post-move inlet temperature became
     real gates (`network_ok`/`thermal_ok`, folded into `safe_now`) — see
-    "Phase 2" → point 5 above for the exact formulas and the stated
+    "Phase 2" → point 6 above for the exact formulas and the stated
     conventions behind both thresholds (25 Gbps NIC / 30°C, neither
     derived from this project's own data, same spirit as the idle
     threshold). Two bugs caught in the same pass, before either ever
@@ -1165,6 +1204,42 @@ re-verified live:**
       workflow. `pymupdf` was pip-installed into the local venv only to
       read paper PDFs; it is not in `requirements.txt` and nothing in the
       app imports it.
+29. **Consolidation safety was only ever half of its own stated design —
+    the source was never forecast-checked, only the target.** The intent
+    (forecast both sides of a consolidation, recommend only if both pass)
+    was always the plan for this feature — see "Phase 2" → `recommendations.py`
+    point 3 above for the exact fix — but only the target side
+    (`forecast_candidate_server()` inside `_rank_consolidation_candidates()`)
+    was ever actually wired in. The source — the server that got flagged
+    idle in the first place — was judged purely on its 6h historical
+    average and never asked whether it would still be idle by the time a
+    move would actually happen. Fixed in `calculate_what_if()`: the source
+    now gets the same 15-minute forecast check as targets (reusing
+    `forecast_candidate_server()`, not `forecast_server()`, since the
+    latter is idle-gated and only supports the 1h/6h/24h operator
+    horizons), compared against its own type's idle threshold rather than
+    the looser 75% consolidation limit. `result["safe"]` for a
+    consolidation is now `source_safe_forecast AND` (a safe target was
+    found) — previously it was `True` unconditionally once any safe
+    target existed, regardless of what the source itself was about to do.
+    **Verified live** against real DB telemetry: five real pending
+    consolidate recommendations (S4, S5, S6, S10, S12) all correctly
+    remained safe with their sources' real forecasts confirmed under
+    threshold; a monkeypatched negative case (source forecast pushed to
+    25% against a 16.8% threshold, with a real safe target still
+    available) correctly flipped `safe` to `false` with a stated reason,
+    and `sync_recommendations()` correctly left it `blocked` rather than
+    `pending`. Also corrected a stale claim in this doc while touching the
+    same code path: point 2 above used to say a missing candidate forecast
+    "is skipped rather than treated as a failure" — the code has never
+    done that; it has always treated a missing forecast as `safe_forecast
+    = False`. The doc was wrong, not the code; fixed the doc.
+    **Side effect worth knowing**: a freshly-idle-flagged source with less
+    than roughly 20-25 minutes of its own telemetry history now starts
+    every consolidate recommendation as `blocked`, not `pending`, until it
+    accumulates enough history for its own 15-minute forecast — the same
+    conservative default the target side already had, now applied
+    symmetrically.
 
 If something looks numerically "off" again, check for the same class of
 issue: an assumption about cadence/scale that isn't actually enforced

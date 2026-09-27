@@ -1,0 +1,21 @@
+%%{init: {"flowchart": {"htmlLabels": false}}}%%
+flowchart TD
+    START2(["Start: pending recommendation —<br/>from Activity Diagram 1"]) --> I{"Recommendation type"}
+    I -- consolidate --> J["Rank same-type candidates:<br/>CPU / memory / network / thermal<br/>+ forecast check"]
+    I -- "archive / dedupe / rightsize" --> K["Estimate storage impact"]
+    J --> L{"Safe candidate found?"}
+    L -- yes --> M["Compute what-if impact:<br/>energy, cost, carbon, water"]
+    L -- no --> N["Mark unsafe,<br/>state reason"]
+    K --> M
+    M --> O["Rank pending recommendations<br/>by weighted score"]
+    N --> O
+    O --> P["Present to operator<br/>on Recommendations page"]
+    P --> Q{"Operator decision"}
+    Q -- Accept --> R["Record OperatorAction,<br/>snapshot impact estimate"]
+    Q -- Snooze --> S["Set snoozed_until;<br/>returns to pending later"]
+    Q -- Dismiss --> T["Record do_nothing"]
+    R --> U["Optionally mark executed later<br/>on Approved Actions page"]
+    S --> END3(["End"])
+    T --> END3
+    U --> V["ESG report + compliance readiness<br/>aggregate the decision log"]
+    V --> END4(["End"])

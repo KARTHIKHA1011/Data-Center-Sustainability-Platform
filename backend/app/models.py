@@ -129,7 +129,7 @@ class Recommendation(Base):
     explanation = Column(String, nullable=False)
 
     status = Column(String, default="pending")
-    # pending, accepted, rejected, snoozed
+    # pending, blocked, accepted, rejected, snoozed
 
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

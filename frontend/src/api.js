@@ -164,7 +164,8 @@ export const api = {
     id,
     action,
     notes = "",
-    snoozeHours = 24
+    snoozeHours = 24,
+    targetServerId = null
   ) =>
     client.post(
       `/recommendations/${id}/action`,
@@ -172,6 +173,7 @@ export const api = {
         action,
         notes,
         snooze_hours: snoozeHours,
+        target_server_id: targetServerId,
       }
     ),
 
