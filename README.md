@@ -90,7 +90,7 @@ ML models never learned from the live simulators.
 
 ```bash
 # Backend
-cd backend
+cd project/backend
 python -m venv venv && source venv/bin/activate      # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python -m app.compute_thresholds     # one-time: derive per-type idle thresholds from the dataset
@@ -99,22 +99,22 @@ alembic upgrade head                 # apply schema migrations
 uvicorn app.main:app --reload --env-file .env    # API at http://localhost:8000
 
 # Simulators (each in its own terminal — all 4 needed for live-updating data)
-cd simulators
+cd project/simulators
 python server_monitor.py
 python power_monitor.py
 python cooling_monitor.py
 python storage_monitor.py
 
 # Frontend
-cd frontend
+cd project/frontend
 npm install
 npm run dev                          # UI at http://localhost:5173
 ```
 
-`backend/.env` holds `DATABASE_URL` for a local PostgreSQL database.
+`project/backend/.env` holds `DATABASE_URL` for a local PostgreSQL database.
 `database.py` reads it automatically — swapping databases is a one-line
 env-var change, no code change. Seed the three role accounts with
-`python -m app.seed_users` (from `backend/`).
+`python -m app.seed_users` (from `project/backend/`).
 
 **Schema changes go through Alembic**, not manual `ALTER TABLE`:
 
@@ -208,39 +208,40 @@ compliance readiness), User Management, Login.
 ## Project structure
 
 ```
-backend/
-  .env                      # DATABASE_URL — never commit real credentials elsewhere
-  alembic/                  # schema migrations
-  app/
-    main.py                 # FastAPI app, all endpoints
-    models.py                 # SQLAlchemy tables
-    schemas.py                  # Pydantic validation
-    database.py                   # Postgres connection, swappable via DATABASE_URL
-    rules_engine.py                 # Idle/storage rules, PUE/WUE/energy math, per-type thresholds
-    compliance.py                     # Compliance-readiness layer (EU 2024/1364, BRSR Core)
-    recommendations.py                  # Flag -> recommendation mapping, what-if simulation, ranking
-    forecasting.py                        # Near-term CPU/memory forecasting
-    auth.py                                 # JWT auth, role guards
-    train_workload_forecast.py                # Trains forecast models from real DB telemetry
-    compute_thresholds.py                       # Derives per-type idle thresholds from the dataset
-    train_model.py                                # Trains CPU + power validation models
-    data/                                           # Real Kaggle dataset + derived thresholds
-    ml_artifacts/                                     # Generated models + metrics
-  requirements.txt
-simulators/
-  server_monitor.py    power_monitor.py    cooling_monitor.py    storage_monitor.py
-frontend/
-  src/
-    api.js    App.jsx    Layout.jsx    AuthContext.jsx    index.css
-    pages/
-      Overview.jsx    Servers.jsx    ServerDetail.jsx    Storage.jsx
-      Analytics.jsx    ModelEval.jsx    Login.jsx    UserManagement.jsx
-      Recommendations.jsx    RecommendationDetail.jsx    ApprovedActions.jsx
-      Preferences.jsx    Reports.jsx
-frontend-static-legacy/     # old single-file HTML dashboard, reference only
-docs/
-  diagrams/     # activity diagrams, DFD, ER diagram
-  CLAUDE.md     # full technical project brief — source of truth for design decisions
+README.md                    # this file
+project/
+  backend/
+    .env                      # DATABASE_URL — never commit real credentials elsewhere
+    alembic/                  # schema migrations
+    app/
+      main.py                 # FastAPI app, all endpoints
+      models.py                 # SQLAlchemy tables
+      schemas.py                  # Pydantic validation
+      database.py                   # Postgres connection, swappable via DATABASE_URL
+      rules_engine.py                 # Idle/storage rules, PUE/WUE/energy math, per-type thresholds
+      compliance.py                     # Compliance-readiness layer (EU 2024/1364, BRSR Core)
+      recommendations.py                  # Flag -> recommendation mapping, what-if simulation, ranking
+      forecasting.py                        # Near-term CPU/memory forecasting
+      auth.py                                 # JWT auth, role guards
+      train_workload_forecast.py                # Trains forecast models from real DB telemetry
+      compute_thresholds.py                       # Derives per-type idle thresholds from the dataset
+      train_model.py                                # Trains CPU + power validation models
+      data/                                           # Real Kaggle dataset + derived thresholds
+      ml_artifacts/                                     # Generated models + metrics
+    requirements.txt
+  simulators/
+    server_monitor.py    power_monitor.py    cooling_monitor.py    storage_monitor.py
+  frontend/
+    src/
+      api.js    App.jsx    Layout.jsx    AuthContext.jsx    index.css
+      pages/
+        Overview.jsx    Servers.jsx    ServerDetail.jsx    Storage.jsx
+        Analytics.jsx    ModelEval.jsx    Login.jsx    UserManagement.jsx
+        Recommendations.jsx    RecommendationDetail.jsx    ApprovedActions.jsx
+        Preferences.jsx    Reports.jsx
+  frontend-static-legacy/     # old single-file HTML dashboard, reference only
+  docs/
+    diagrams/     # activity diagrams, DFD, ER diagram
 ```
 
 ---
@@ -260,6 +261,3 @@ docs/
 7. No gauges, rings, or progress bars in the UI.
 8. Every recommendation is reviewed by a human. Nothing executes
    automatically.
-
-See `docs/CLAUDE.md` for the full technical design history, every bug found
-and fixed, and the reasoning behind each of these decisions.
