@@ -10,5 +10,13 @@ flowchart TD
     E -- no --> F["Resolve any existing flag<br/>for that condition"]
     F --> END2(["End"])
     E -- yes --> G["Raise or update Flag"]
-    G --> H["Sync recommendations<br/>from active flags"]
-    H --> HANDOFF(["Recommendation queued as pending"])
+    G --> H{"Recommendation type<br/>from this flag"}
+    H -- consolidate --> P1["Forecast the source's own CPU<br/>15 min ahead vs its own idle threshold"]
+    P1 --> P2["Rank same-type candidates:<br/>CPU / memory / network / thermal<br/>+ each candidate's own forecast"]
+    P2 --> P3{"Safe target found<br/>AND source still forecast idle?"}
+    P3 -- yes --> READY["Recommendation status: pending"]
+    P3 -- no --> BLOCKED["Recommendation status: blocked —<br/>hidden from the operator,<br/>re-checked next cycle"]
+    H -- "archive / dedupe / rightsize" --> READY2["Recommendation status: pending —<br/>storage actions have no forecast gate"]
+    READY --> HANDOFF(["Pending recommendation,<br/>ready for the operator"])
+    READY2 --> HANDOFF
+    BLOCKED --> END3(["End"])

@@ -429,11 +429,6 @@ export default function Preferences() {
               </div>
             </div>
             )}
-
-            <div className="info-note">
-              <strong>Ranking Formula:</strong> Scores are calculated as{" "}
-              <code>Σ(weight × normalized_impact) − risk_weight × risk</code>. Normalizing against the current candidate batch prevents high-magnitude units from dominating decision outcomes.
-            </div>
           </>
         )}
       </div>

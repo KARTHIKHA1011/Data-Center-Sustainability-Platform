@@ -14,10 +14,11 @@ export default function Login() {
   const navigate  = useNavigate();
   const location  = useLocation();
 
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [error,    setError]    = useState("");
-  const [loading,  setLoading]  = useState(false);
+  const [email,       setEmail]       = useState("");
+  const [password,    setPassword]    = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error,       setError]       = useState("");
+  const [loading,     setLoading]     = useState(false);
 
   // After login redirect to wherever they were trying to go (default: "/")
   const from = location.state?.from?.pathname || "/";
@@ -149,6 +150,39 @@ export default function Login() {
           color: var(--text-muted, #8A9691);
         }
 
+        .login-password-wrap {
+          position: relative;
+        }
+
+        .login-password-wrap .login-input {
+          padding-right: 60px;
+        }
+
+        .login-password-toggle {
+          position: absolute;
+          top: 50%;
+          right: 6px;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          padding: 4px 8px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-secondary, #5F6E68);
+          cursor: pointer;
+          border-radius: 6px;
+        }
+
+        .login-password-toggle:hover:not(:disabled) {
+          background: var(--page-bg, #F2F8F5);
+          color: var(--accent-dark, #0F6E56);
+        }
+
+        .login-password-toggle:disabled {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+
         .login-error {
           background: var(--danger-bg, #FAECE7);
           color: var(--danger-text, #993C1D);
@@ -275,16 +309,29 @@ export default function Login() {
 
             <div className="login-field">
               <label className="login-label" htmlFor="password">Password</label>
-              <input
-                id="password"
-                className="login-input"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                disabled={loading}
-              />
+              <div className="login-password-wrap">
+                <input
+                  id="password"
+                  className="login-input"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  className="login-password-toggle"
+                  onClick={() => setShowPassword(v => !v)}
+                  disabled={loading}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  tabIndex={-1}
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
 
             <button className="login-btn" type="submit" disabled={loading}>
