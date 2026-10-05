@@ -369,7 +369,9 @@ def _latest_row_per_server(db: Session, model):
 
 @app.get("/servers")
 def list_servers(db: Session = Depends(get_db)):
-    servers = db.query(models.Server).all()
+    # Explicit order: without ORDER BY, Postgres returns rows in physical
+    # order, which shifts whenever a row is updated (e.g. a region change).
+    servers = db.query(models.Server).order_by(models.Server.id).all()
     out = []
     idle_cutoff = datetime.utcnow() - timedelta(hours=rules_engine.IDLE_LOOKBACK_HOURS)
     for s in servers:
