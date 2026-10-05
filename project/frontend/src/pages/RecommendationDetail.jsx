@@ -915,19 +915,6 @@ export default function RecommendationDetail() {
           padding: 14px 16px; font-size: 13.5px; color: var(--danger-text, #993C1D); line-height: 1.55;
         }
 
-        /* ── Assumptions ─────────────────────────── */
-        .rd-assumptions {
-          background: var(--page-bg, #F2F8F5); border-radius: 8px; padding: 14px 16px; margin-top: 14px;
-        }
-        .rd-assumptions-title {
-          font-size: 11px; font-weight: 700; text-transform: uppercase;
-          letter-spacing: .06em; color: var(--text-muted); margin: 0 0 8px;
-        }
-        .rd-assumptions ul { margin: 0; padding-left: 16px; }
-        .rd-assumptions li {
-          font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 4px;
-        }
-
         /* ── Decision buttons ────────────────────── */
         .rd-decision-row { display: flex; gap: 10px; flex-wrap: wrap; }
         .rd-btn-primary {
@@ -1042,8 +1029,13 @@ export default function RecommendationDetail() {
               <p className="rd-card-title" style={{ marginBottom: 4 }}>Target server</p>
               <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0 }}>
                 {safeCandidates.length === 1
-                  ? "One candidate below the CPU/memory limit right now — check its badge, since it can still be marked \"Risky soon\" or blocked on network/thermal grounds. The impact estimates below reflect this server unless a different one is selected."
-                  : "Candidates below the CPU/memory limit right now, ranked by most headroom after the move — including any marked \"Risky soon\", \"Network limit\", or \"Thermal limit\", so you can see and judge what was considered, not just the top pick. Click one to see how the impact estimates change."}
+                  ? "One same-type server in the same region is below the CPU/memory limit right now. Check its badge, since it can still be marked \"Risky soon\" or blocked on network/thermal grounds. The impact estimates below reflect this server unless a different one is selected."
+                  : "Same-type servers in the same region that are below the CPU/memory limit right now, ranked by most headroom after the move. This includes any marked \"Risky soon\", \"Network limit\", or \"Thermal limit\", so you can see what was considered, not just the top pick. Click one to see how the impact estimates change."}
+              </p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "6px 0 0" }}>
+                CPU and Memory on each card are that server's load <strong>after</strong> it
+                takes on this workload (its own current load plus 90% of the idle server's).
+                The marker on each bar is the 75% safety limit.
               </p>
             </div>
           </div>
@@ -1171,24 +1163,6 @@ export default function RecommendationDetail() {
               </div>
             )}
 
-            {/* Assumptions (only show for the default target) */}
-            {!isUsingAlternate && baseImpact.assumptions?.length > 0 && (
-              <div className="rd-assumptions">
-                <p className="rd-assumptions-title">Assumptions</p>
-                <ul>
-                  {baseImpact.assumptions.map((a, i) => <li key={i}>{a}</li>)}
-                </ul>
-              </div>
-            )}
-            {isUsingAlternate && (
-              <div className="rd-assumptions">
-                <p className="rd-assumptions-title">Note on alternate target estimates</p>
-                <ul>
-                  <li>These values are re-scaled proportionally from the top-ranked target's estimates using the post-move CPU ratio between the two candidates.</li>
-                  <li>Switch back to the top pick to see the original backend-calculated assumptions.</li>
-                </ul>
-              </div>
-            )}
           </>
         )}
       </div>

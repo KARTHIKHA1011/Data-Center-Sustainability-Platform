@@ -36,11 +36,11 @@ Thirteen servers exist (`S1`–`S13`), each with a fixed identity assigned at re
 | S5 | Edge | Air | APAC | 0.12 (idle) |
 | S6 | Compute | Air | APAC | 0.05 (very idle) |
 | S7 | GPU | Hybrid | EU | 0.55 |
-| S8 | GPU | Hybrid | ME | 0.10 (idle) |
+| S8 | GPU | Hybrid | EU | 0.10 (idle) |
 | S9 | Storage | Liquid | ME | 0.45 |
-| S10 | Storage | Liquid | APAC | 0.14 (idle) |
+| S10 | Storage | Liquid | ME | 0.14 (idle) |
 | S11 | Edge | Air | APAC | 0.50 |
-| S12 | Edge | Air | EU | 0.16 (idle) |
+| S12 | Edge | Air | APAC | 0.16 (idle) |
 | S13 | Compute | Air | ME | 0.70 |
 
 `cooling_type` and `datacenter_region` are drawn from the exact vocabulary the ML training dataset uses (`Air`/`Hybrid`/`Liquid`, `APAC`/`EU`/`ME`) — this matters later (§6.3).

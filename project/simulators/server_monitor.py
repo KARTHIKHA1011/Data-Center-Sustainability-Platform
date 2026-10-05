@@ -184,7 +184,7 @@ def register_servers():
         "S8": {
             "server_type": "GPU",
             "cooling_type": "Hybrid",
-            "datacenter_region": "ME",
+            "datacenter_region": "EU",
         },
 
         "S9": {
@@ -196,7 +196,7 @@ def register_servers():
         "S10": {
             "server_type": "Storage",
             "cooling_type": "Liquid",
-            "datacenter_region": "APAC",
+            "datacenter_region": "ME",
         },
 
         "S11": {
@@ -208,7 +208,7 @@ def register_servers():
         "S12": {
             "server_type": "Edge",
             "cooling_type": "Air",
-            "datacenter_region": "EU",
+            "datacenter_region": "APAC",
         },
 
         "S13": {

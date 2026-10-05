@@ -12,8 +12,7 @@ same fetch-then-generate pattern power_monitor.py already uses for IT power.
 Earlier this drew independent random numbers with no relationship to load at
 all, which meant the CPU/power validation models' `inlet_temperature_c` and
 `cooling_efficiency` inputs were pure noise on live data regardless of how
-good the models themselves were -- see CLAUDE.md's "Phase 2" section for the
-full history of that problem and why it was worth fixing.
+good the models themselves were.
 
 Different cooling_type values respond differently, on purpose: Air (weakest
 cooling) shows the largest temperature rise and efficiency drop under load,

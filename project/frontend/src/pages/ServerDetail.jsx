@@ -1608,7 +1608,7 @@ export default function ServerDetail() {
                     <div className="pipeline-desc">
                       {consolidateImpact
                         .assumptions?.[0] ||
-                        "No same-type server currently has headroom."}
+                        "No same-type server in this region currently has headroom."}
                     </div>
                   </>
                 )}

@@ -97,6 +97,7 @@ python -m app.compute_thresholds     # one-time: derive per-type idle thresholds
 python -m app.train_model            # one-time: train CPU + power models (~15s)
 alembic upgrade head                 # apply schema migrations
 uvicorn app.main:app --reload --env-file .env    # API at http://localhost:8000
+.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --env-file .env
 
 # Simulators (each in its own terminal — all 4 needed for live-updating data)
 cd project/simulators
@@ -200,8 +201,8 @@ compliance readiness), User Management, Login.
 
 - Verdict pills + plain-English relationship text instead of gauges/rings/
   progress bars.
-- Role-aware navigation and route guards (infrastructure manager,
-  sustainability manager, operations engineer).
+- Role-aware navigation (infrastructure manager, sustainability manager,
+  operations engineer), with write actions enforced server-side.
 
 ---
 

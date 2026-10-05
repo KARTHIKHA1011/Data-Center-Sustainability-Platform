@@ -317,7 +317,10 @@ def _rank_consolidation_candidates(
     """
     Implements the what-if consolidation algorithm.
 
-    Candidates are same-type servers that aren't themselves idle.
+    Candidates are servers of the same type AND in the same datacenter
+    region as the source that aren't themselves idle. Region matters
+    because a workload is not moved across data centers as a routine
+    consolidation.
 
     Every candidate is checked for whether it can safely absorb the source
     workload, TWICE: once against its current snapshot, and once against
@@ -327,9 +330,9 @@ def _rank_consolidation_candidates(
     a bad pick -- it might be about to get busy on its own, independent of
     anything this system does, and the snapshot check has no way to see
     that. A candidate only counts as safe when BOTH checks pass. When a
-    forecast isn't available yet (not enough history), the forecast check
-    is skipped rather than treated as a failure -- missing data shouldn't
-    block a recommendation that the current-state check already approved.
+    forecast isn't available yet (not enough history), the candidate is
+    treated as NOT safe -- missing data is uncertainty, not evidence of
+    safety.
 
     Candidates are returned ranked:
 
@@ -346,6 +349,7 @@ def _rank_consolidation_candidates(
         db.query(models.Server)
         .filter(
             models.Server.server_type == source_server.server_type,
+            models.Server.datacenter_region == source_server.datacenter_region,
             models.Server.server_id != source_server.server_id,
         )
         .all()
@@ -944,7 +948,7 @@ def calculate_what_if(
                 )
 
                 result["assumptions"].append(
-                    f"{len(ranked)} same-type server(s) considered, "
+                    f"{len(ranked)} same-type, same-region server(s) considered, "
                     f"but none has headroom to absorb this workload "
                     f"without crossing {SAFETY_LIMIT_PERCENT:.0f}% "
                     "CPU or memory, saturating its network link, or "
