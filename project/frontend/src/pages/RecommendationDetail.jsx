@@ -417,7 +417,7 @@ function CandidateCard({ c, isSelected, onSelect }) {
         <div className="rd-candidate-forecast" title="This server's own near-term forecast, independent of this move">
           Own forecast: {c.forecast_predicted_cpu.toFixed(1)}% CPU
           {c.forecast_predicted_memory != null && ` / ${c.forecast_predicted_memory.toFixed(1)}% memory`}
-          {" "}in ~15 min
+          {" "}
         </div>
       )}
       {(c.post_move_network_gbps != null || c.predicted_post_move_temp_c != null) && (
