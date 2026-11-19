@@ -540,7 +540,6 @@ def server_prediction(server_id: str, db: Session = Depends(get_db)):
         "pue": pue,
         "server_type": server_meta.server_type,
         "cooling_type": server_meta.cooling_type,
-        "datacenter_region": server_meta.datacenter_region,
         "time_of_day": rules_engine.get_time_of_day(latest_server.timestamp),
     }])
 

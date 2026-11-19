@@ -299,7 +299,6 @@ def _predict_power_kw(
         "pue": pue,
         "server_type": server_meta.server_type,
         "cooling_type": server_meta.cooling_type,
-        "datacenter_region": server_meta.datacenter_region,
         "time_of_day": rules_engine.get_time_of_day(cooling.timestamp),
         "cpu_utilization": cpu_value,
     }])

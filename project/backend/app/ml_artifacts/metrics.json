@@ -1,28 +1,28 @@
 {
   "dataset_rows": 10000,
-  "dataset_columns": 16,
+  "dataset_columns": 15,
   "missing_values": {
     "datacenter_region": 3990
   },
-  "imputation_strategy": "most_frequent category, applied inside the sklearn Pipeline",
+  "imputation_strategy": "none needed: datacenter_region (the only column with missing values) is excluded from both models after an imputation comparison showed no accuracy difference; see docs/experiments/",
   "selection_rule": "Lowest MAE wins, but a more complex model (Random Forest / XGBoost) must beat Linear Regression by at least 5% relative MAE improvement to be selected over it -- otherwise the simpler, more explainable model is kept.",
   "cpu_model": {
     "selected_model": "LinearRegression",
     "results": {
       "LinearRegression": {
-        "MAE": 4.511,
-        "RMSE": 7.671,
+        "MAE": 4.509,
+        "RMSE": 7.669,
         "R2": 0.845
       },
       "RandomForest": {
-        "MAE": 4.828,
-        "RMSE": 8.077,
+        "MAE": 4.837,
+        "RMSE": 8.083,
         "R2": 0.828
       },
       "XGBoost": {
-        "MAE": 4.833,
-        "RMSE": 7.999,
-        "R2": 0.831
+        "MAE": 4.801,
+        "RMSE": 7.891,
+        "R2": 0.836
       }
     },
     "features": {
@@ -37,7 +37,6 @@
       "categorical": [
         "server_type",
         "cooling_type",
-        "datacenter_region",
         "time_of_day"
       ]
     },
@@ -53,14 +52,14 @@
         "R2": 0.422
       },
       "RandomForest": {
-        "MAE": 0.227,
+        "MAE": 0.228,
         "RMSE": 0.346,
-        "R2": 0.366
+        "R2": 0.364
       },
       "XGBoost": {
-        "MAE": 0.222,
+        "MAE": 0.221,
         "RMSE": 0.341,
-        "R2": 0.385
+        "R2": 0.384
       }
     },
     "features": {
@@ -76,7 +75,6 @@
       "categorical": [
         "server_type",
         "cooling_type",
-        "datacenter_region",
         "time_of_day"
       ]
     },

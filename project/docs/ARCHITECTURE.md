@@ -58,14 +58,15 @@ given access to in production, and is why storage access is realistically
 Both are trained in `train_model.py` from the same real dataset,
 `green_ai_datacenter.csv` (10,000 rows, 4 `server_type` categories: Compute,
 Edge, GPU, Storage; one real data-quality issue — 3,990 missing
-`datacenter_region` values, handled via most-frequent imputation inside the
-sklearn Pipeline).
+`datacenter_region` values; a controlled comparison of imputation options
+showed region adds no predictive value, so it is excluded from both models,
+see `docs/experiments/`).
 
 ### CPU estimation model
 - **Target:** `cpu_utilization`
 - **Inputs:** workload_intensity, memory_utilization, network_throughput_gbps,
   inlet_temperature_c, cooling_efficiency, pue, + categoricals (server_type,
-  cooling_type, datacenter_region, time_of_day)
+  cooling_type, time_of_day)
 - **`cpu_utilization` is deliberately excluded from its own inputs** — target
   leakage.
 - **Role:** a *validation layer*. It proves the feature set genuinely

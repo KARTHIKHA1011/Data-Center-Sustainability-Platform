@@ -43,7 +43,7 @@ Thirteen servers exist (`S1`–`S13`), each with a fixed identity assigned at re
 | S12 | Edge | Air | APAC | 0.16 (idle) |
 | S13 | Compute | Air | ME | 0.70 |
 
-`cooling_type` and `datacenter_region` are drawn from the exact vocabulary the ML training dataset uses (`Air`/`Hybrid`/`Liquid`, `APAC`/`EU`/`ME`) — this matters later (§6.3).
+`cooling_type` is drawn from the exact vocabulary the ML training dataset uses (`Air`/`Hybrid`/`Liquid`) — this matters later (§6.3). `datacenter_region` uses the dataset's `APAC`/`EU`/`ME` values too, but is no longer a model input; it is used only as a placement constraint for consolidation targets.
 
 ### 2.2 The exact generating formulas, as they exist today
 
@@ -145,11 +145,12 @@ Both trained once, offline, by `train_model.py`, on `green_ai_datacenter.csv` �
 numeric      -> StandardScaler()
 categorical  -> SimpleImputer(most_frequent) -> OneHotEncoder(handle_unknown="ignore", drop="first")
 ```
+`datacenter_region` (39.9% missing in the dataset) is excluded from both models: imputing it with the most frequent value, adding a missingness flag, using an "Unknown" category and dropping it all gave statistically indistinguishable accuracy (`app/experiments/region_imputation.py`, results in `docs/experiments/`), so the simplest option was chosen.
 `drop="first"` matters: without it, one-hot-encoding every category plus an intercept creates a perfectly collinear matrix, which once made `LinearRegression`'s coefficients numerically explode (a real, caught, fixed bug).
 
 ### 5.2 CPU model
 - **Target:** `cpu_utilization`
-- **Inputs:** `workload_intensity, memory_utilization, network_throughput_gbps, inlet_temperature_c, cooling_efficiency, pue` + categoricals `server_type, cooling_type, datacenter_region, time_of_day`
+- **Inputs:** `workload_intensity, memory_utilization, network_throughput_gbps, inlet_temperature_c, cooling_efficiency, pue` + categoricals `server_type, cooling_type, time_of_day`
 - **Deliberately excludes its own target** — including it would be leakage
 - **Result:** MAE 4.51 / RMSE 7.67 / **R² 0.845**
 

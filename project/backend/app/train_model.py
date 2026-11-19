@@ -5,8 +5,8 @@ loaded from app/data/green_ai_datacenter.csv.
 
 This replaces the earlier synthetic-data version of this script. The
 dataset's one real data-quality issue -- 3,990 missing values in
-datacenter_region -- is handled explicitly below with a documented
-imputation strategy, matching dataset_summary.txt / dataset_metadata.json.
+datacenter_region -- is handled by excluding that feature from both models
+(see the CATEGORICAL_FEATURES comment and docs/experiments/).
 
 Two separate models are trained here:
 
@@ -49,7 +49,14 @@ DATA_PATH = os.path.join(APP_DIR, "data", "green_ai_datacenter.csv")
 MODEL_DIR = os.path.join(APP_DIR, "ml_artifacts")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-CATEGORICAL_FEATURES = ["server_type", "cooling_type", "datacenter_region", "time_of_day"]
+# datacenter_region is deliberately NOT a model input. 3,990 of its 10,000
+# values are missing (39.9%), and a controlled comparison (most-frequent
+# imputation, imputation + missingness flag, "Unknown" category, feature
+# removed) showed no measurable difference in CPU or power accuracy, so the
+# simplest option was chosen: drop it. See
+# app/experiments/region_imputation.py and docs/experiments/. Region is still
+# used by the recommendation engine as a placement constraint.
+CATEGORICAL_FEATURES = ["server_type", "cooling_type", "time_of_day"]
 
 # ---- CPU model feature set (cpu_utilization excluded -- it's the target) ----
 CPU_NUMERIC_FEATURES = [
@@ -217,6 +224,9 @@ def train_target(df, target, numeric_features, label):
 
 def main():
     df = load_and_clean_dataset()
+    # Counted before rescale_power_target() adds a helper column, otherwise
+    # the reported column count is one too high.
+    dataset_columns = len(df.columns)
 
     # ---- CPU estimation model ----
     cpu_winner, cpu_pipeline, cpu_results = train_target(
@@ -238,9 +248,11 @@ def main():
 
     metrics_out = {
         "dataset_rows": len(df),
-        "dataset_columns": len(df.columns),
+        "dataset_columns": dataset_columns,
         "missing_values": {"datacenter_region": int(df["datacenter_region"].isna().sum())},
-        "imputation_strategy": "most_frequent category, applied inside the sklearn Pipeline",
+        "imputation_strategy": "none needed: datacenter_region (the only column with missing values) "
+                                "is excluded from both models after an imputation comparison showed "
+                                "no accuracy difference; see docs/experiments/",
         "selection_rule": "Lowest MAE wins, but a more complex model (Random Forest / XGBoost) "
                            "must beat Linear Regression by at least 5% relative MAE improvement "
                            "to be selected over it -- otherwise the simpler, more explainable "

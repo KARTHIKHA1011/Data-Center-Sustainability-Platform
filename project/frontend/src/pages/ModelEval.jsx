@@ -119,7 +119,7 @@ export default function ModelEval() {
             <div className="metric-card warn">
               <p className="metric-label">Missing region values</p>
               <p className="metric-value">{metrics.missing_values?.datacenter_region}</p>
-              <p className="metric-hint">Filled in using most-frequent-category imputation</p>
+              <p className="metric-hint">Excluded from both models: an imputation comparison showed no accuracy difference</p>
             </div>
           </div>
 
