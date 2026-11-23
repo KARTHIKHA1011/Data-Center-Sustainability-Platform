@@ -111,9 +111,16 @@ def rescale_power_target(df):
     range down to LIVE_IT_POWER_MIN_KW..LIVE_IT_POWER_MAX_KW, preserving
     relative ordering and shape (min-max scaling), so the model trained on
     it produces output directly comparable to live telemetry.
+
+    The min/max are taken from the TRAINING rows only, so no information
+    from the test rows enters the scaling. The split below must stay
+    identical to the one in train_target() (same size, test_size and
+    random_state), which makes the same row assignment.
     """
-    kaggle_min = df[POWER_TARGET].min()
-    kaggle_max = df[POWER_TARGET].max()
+    train_index, _ = train_test_split(df.index, test_size=0.2, random_state=42)
+    train_power = df.loc[train_index, POWER_TARGET]
+    kaggle_min = train_power.min()
+    kaggle_max = train_power.max()
     kaggle_range = kaggle_max - kaggle_min
 
     live_range = LIVE_IT_POWER_MAX_KW - LIVE_IT_POWER_MIN_KW

@@ -47,18 +47,18 @@
     "selected_model": "LinearRegression",
     "results": {
       "LinearRegression": {
-        "MAE": 0.211,
-        "RMSE": 0.33,
+        "MAE": 0.213,
+        "RMSE": 0.333,
         "R2": 0.422
       },
       "RandomForest": {
-        "MAE": 0.228,
-        "RMSE": 0.346,
+        "MAE": 0.229,
+        "RMSE": 0.349,
         "R2": 0.364
       },
       "XGBoost": {
-        "MAE": 0.221,
-        "RMSE": 0.341,
+        "MAE": 0.223,
+        "RMSE": 0.343,
         "R2": 0.384
       }
     },
@@ -81,7 +81,7 @@
     "target": "power_consumption_kw_rescaled",
     "note": "cpu_utilization IS included here since power, not CPU, is the target. MAE/RMSE below are in rescaled kW (live IT-power scale), not the dataset's own kW scale -- see rescale below.",
     "rescale": {
-      "kaggle_min_kw": 28.17,
+      "kaggle_min_kw": 29.67,
       "kaggle_max_kw": 233.63,
       "live_min_kw": 1.2,
       "live_max_kw": 4.5
